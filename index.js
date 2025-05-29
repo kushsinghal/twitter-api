@@ -1,36 +1,27 @@
-// index.js
-require("dotenv").config(); // ✅ This must be first!
-
-const express = require("express");
-const axios = require("axios");
-
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-const BEARER_TOKEN = process.env.BEARER_TOKEN;
-console.log("Bearer Token Loaded:", BEARER_TOKEN);
-
-
 app.get("/latest-tweet", async (req, res) => {
-  const username = req.query.username;
+  const { username, userid } = req.query;
 
-  if (!username) {
-    return res.status(400).json({ error: "Username is required" });
+  if (!username && !userid) {
+    return res.status(400).json({ error: "Provide either username or userid" });
   }
 
   try {
-    const userRes = await axios.get(
-      `https://api.twitter.com/2/users/by/username/${username}`,
-      {
-        headers: {
-          Authorization: `Bearer ${BEARER_TOKEN}`,
-        },
-      }
-    );
+    let userId = userid;
 
-    const userId = userRes.data.data.id;
+    // Step 1: Get User ID from Username (if needed)
+    if (username) {
+      const userRes = await axios.get(
+        `https://api.twitter.com/2/users/by/username/${username}`,
+        {
+          headers: {
+            Authorization: `Bearer ${BEARER_TOKEN}`,
+          },
+        }
+      );
+      userId = userRes.data.data.id;
+    }
 
+    // Step 2: Get Latest Tweet with media and expanded info
     const tweetsRes = await axios.get(
       `https://api.twitter.com/2/users/${userId}/tweets`,
       {
@@ -39,28 +30,51 @@ app.get("/latest-tweet", async (req, res) => {
         },
         params: {
           max_results: 5,
-          "tweet.fields": "created_at",
+          "tweet.fields": "attachments,created_at,text",
+          expansions: "attachments.media_keys",
+          "media.fields": "url,preview_image_url,type",
         },
       }
     );
 
-    const latestTweet = tweetsRes.data.data?.[0];
+    const tweet = tweetsRes.data.data?.[0];
 
-    if (!latestTweet) {
+    if (!tweet) {
       return res.status(404).json({ error: "No tweets found" });
     }
 
+    // Step 3: Extract media URLs if present
+    const media = [];
+    const includes = tweetsRes.data.includes;
+
+    if (tweet.attachments && tweet.attachments.media_keys && includes?.media) {
+      const mediaKeys = tweet.attachments.media_keys;
+
+      for (let key of mediaKeys) {
+        const mediaObj = includes.media.find((m) => m.media_key === key);
+        if (mediaObj) {
+          if (mediaObj.url) {
+            media.push(mediaObj.url);
+          } else if (mediaObj.preview_image_url) {
+            media.push(mediaObj.preview_image_url); // For video/animated gif
+          }
+        }
+      }
+    }
+
+    // Step 4: Full Tweet URL
+    const tweetUrl = `https://twitter.com/${username}/status/${tweet.id}`;
+
     res.json({
       username,
-      tweet: latestTweet.text,
-      date: latestTweet.created_at,
+      tweet_id: tweet.id,
+      text: tweet.text,
+      media,
+      link: tweetUrl,
+      date: tweet.created_at,
     });
   } catch (error) {
     console.error(error.response?.data || error.message);
     res.status(500).json({ error: "Something went wrong" });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
