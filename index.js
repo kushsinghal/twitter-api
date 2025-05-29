@@ -1,3 +1,18 @@
+require("dotenv").config(); // Load .env first
+
+const express = require("express");
+const axios = require("axios");
+
+const app = express(); // ❗ This must be before app.get()
+const PORT = process.env.PORT || 3000;
+const BEARER_TOKEN = process.env.BEARER_TOKEN;
+
+const cache = {}; // for in-memory caching
+
+// --- Your app.get("/latest-tweet", ... comes below ---
+
+
+
 app.get("/latest-tweet", async (req, res) => {
   const { username, userid } = req.query;
   const cacheKey = `tweets_${username || userid}`;
