@@ -11,6 +11,11 @@ const cache = {}; // for in-memory caching
 
 // --- Your app.get("/latest-tweet", ... comes below ---
 
+// ... ✂️ your route logic here ...
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
 
 
 app.get("/latest-tweet", async (req, res) => {
