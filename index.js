@@ -1,3 +1,8 @@
+// Simple in-memory cache
+const cache = {};
+
+
+
 require("dotenv").config(); // Load environment variables first!
 
 const express = require("express");
@@ -11,10 +16,22 @@ const BEARER_TOKEN = process.env.BEARER_TOKEN;
 // Route: Get latest tweet text, media, and URL
 app.get("/latest-tweet", async (req, res) => {
   const { username, userid } = req.query;
-
-  if (!username && !userid) {
+  
+    const cacheKey = username || userid;
+	
+	 if (!cacheKey) {
     return res.status(400).json({ error: "Provide either username or userid" });
   }
+
+
+  // If result is already in cache, return it immediately
+  if (cache[cacheKey]) {
+    console.log(`⚡ Serving CACHED data for ${cacheKey}`);
+    return res.json(cache[cacheKey]);
+  }
+
+
+  
 
   try {
     let userId = userid;
