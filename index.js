@@ -1,3 +1,14 @@
+require("dotenv").config(); // Load environment variables first!
+
+const express = require("express");
+const axios = require("axios");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const BEARER_TOKEN = process.env.BEARER_TOKEN;
+
+// Route: Get latest tweet text, media, and URL
 app.get("/latest-tweet", async (req, res) => {
   const { username, userid } = req.query;
 
@@ -8,7 +19,7 @@ app.get("/latest-tweet", async (req, res) => {
   try {
     let userId = userid;
 
-    // Step 1: Get User ID from Username (if needed)
+    // Step 1: Get User ID from Username
     if (username) {
       const userRes = await axios.get(
         `https://api.twitter.com/2/users/by/username/${username}`,
@@ -21,8 +32,8 @@ app.get("/latest-tweet", async (req, res) => {
       userId = userRes.data.data.id;
     }
 
-    // Step 2: Get Latest Tweet with media and expanded info
-    const tweetsRes = await axios.get(
+    // Step 2: Fetch latest tweet with media
+    const tweetRes = await axios.get(
       `https://api.twitter.com/2/users/${userId}/tweets`,
       {
         headers: {
@@ -37,36 +48,33 @@ app.get("/latest-tweet", async (req, res) => {
       }
     );
 
-    const tweet = tweetsRes.data.data?.[0];
-
+    const tweet = tweetRes.data.data?.[0];
     if (!tweet) {
       return res.status(404).json({ error: "No tweets found" });
     }
 
-    // Step 3: Extract media URLs if present
+    // Step 3: Parse media (if any)
     const media = [];
-    const includes = tweetsRes.data.includes;
-
-    if (tweet.attachments && tweet.attachments.media_keys && includes?.media) {
-      const mediaKeys = tweet.attachments.media_keys;
-
-      for (let key of mediaKeys) {
-        const mediaObj = includes.media.find((m) => m.media_key === key);
-        if (mediaObj) {
-          if (mediaObj.url) {
-            media.push(mediaObj.url);
-          } else if (mediaObj.preview_image_url) {
-            media.push(mediaObj.preview_image_url); // For video/animated gif
-          }
-        }
+    const includes = tweetRes.data.includes;
+    if (
+      tweet.attachments &&
+      tweet.attachments.media_keys &&
+      includes?.media
+    ) {
+      for (const key of tweet.attachments.media_keys) {
+        const mediaItem = includes.media.find((m) => m.media_key === key);
+        if (mediaItem?.url) media.push(mediaItem.url);
+        else if (mediaItem?.preview_image_url) media.push(mediaItem.preview_image_url);
       }
     }
 
-    // Step 4: Full Tweet URL
-    const tweetUrl = `https://twitter.com/${username}/status/${tweet.id}`;
+    // Step 4: Make tweet URL
+    const tweetUrl = `https://twitter.com/${username || "user"}/status/${tweet.id}`;
 
+    // Step 5: Send response
     res.json({
-      username,
+      username: username || null,
+      userid: userId,
       tweet_id: tweet.id,
       text: tweet.text,
       media,
@@ -74,7 +82,12 @@ app.get("/latest-tweet", async (req, res) => {
       date: tweet.created_at,
     });
   } catch (error) {
-    console.error(error.response?.data || error.message);
+    console.error("API Error:", error.response?.data || error.message);
     res.status(500).json({ error: "Something went wrong" });
   }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
