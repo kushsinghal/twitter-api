@@ -1,17 +1,23 @@
-require("dotenv").config(); // Load environment variables from .env
+require("dotenv").config(); // Load .env first
 
 const express = require("express");
 const axios = require("axios");
 
-const app = express();
+const app = express(); // ❗ This must be before app.get()
 const PORT = process.env.PORT || 3000;
 const BEARER_TOKEN = process.env.BEARER_TOKEN;
 
-const cache = {}; // In-memory caching
+const cache = {}; // for in-memory caching
 
-// ----------------------
-// ✅ GET /latest-tweet route
-// ----------------------
+// --- Your app.get("/latest-tweet", ... comes below ---
+
+// ... ✂️ your route logic here ...
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
+
+
 app.get("/latest-tweet", async (req, res) => {
   const { username, userid } = req.query;
   const cacheKey = `tweets_${username || userid}`;
@@ -20,7 +26,7 @@ app.get("/latest-tweet", async (req, res) => {
     return res.status(400).json({ error: "Provide either username or userid" });
   }
 
-  // ✅ Check cache
+  // Return from cache if available
   if (cache[cacheKey]) {
     console.log(`⚡ Serving cached tweets for ${cacheKey}`);
     return res.json(cache[cacheKey]);
@@ -29,7 +35,7 @@ app.get("/latest-tweet", async (req, res) => {
   try {
     let userId = userid;
 
-    // 🔁 Step 1: Get user ID from username
+    // 🌐 Step 1: Get user ID if only username is provided
     if (username) {
       const userRes = await axios.get(
         `https://api.twitter.com/2/users/by/username/${username}`,
@@ -42,7 +48,7 @@ app.get("/latest-tweet", async (req, res) => {
       userId = userRes.data.data.id;
     }
 
-    // 🐦 Step 2: Get last 6 tweets with media
+    // 🐦 Step 2: Get last 6 tweets from the user
     const tweetsRes = await axios.get(
       `https://api.twitter.com/2/users/${userId}/tweets`,
       {
@@ -58,23 +64,24 @@ app.get("/latest-tweet", async (req, res) => {
       }
     );
 
-    // 🐛 Debug log: RAW Twitter API data
-    console.log("🧾 RAW Twitter API Response:");
+ // ✅ Step 3: Debug log full response
+    console.log("RAW Twitter API Response:");
     console.dir(tweetsRes.data, { depth: null });
-
-    const tweets = tweetsRes.data.data || [];
-    const mediaIncludes = tweetsRes.data.includes?.media || [];
-
-    // 🎯 Step 3: Build map of media keys to URLs
+    const tweets = tweetsRes.data.data;
     const mediaMap = {};
-    mediaIncludes.forEach((mediaItem) => {
-      const mediaUrl = mediaItem.url || mediaItem.preview_image_url;
-      if (mediaUrl) {
-        mediaMap[mediaItem.media_key] = mediaUrl;
-      }
-    });
+    const includes = tweetsRes.data.includes;
 
-    // 📦 Step 4: Prepare cleaned tweet data
+    // 🎥 Step 3: Prepare a map of media_key to media URL
+    if (includes?.media?.length) {
+      includes.media.forEach((media) => {
+        const mediaUrl = media.url || media.preview_image_url;
+        if (mediaUrl) {
+          mediaMap[media.media_key] = mediaUrl;
+        }
+      });
+    }
+
+    // 📦 Step 4: Process tweets
     const tweetData = tweets.map((tweet) => {
       const media = [];
 
@@ -94,25 +101,18 @@ app.get("/latest-tweet", async (req, res) => {
       };
     });
 
-    // 💾 Step 5: Cache and return
+    // 💾 Step 5: Cache the result
     cache[cacheKey] = tweetData;
-    console.log(`✅ Cached tweets for ${cacheKey}`);
+    console.log(`✅ Cached 6 tweets for ${cacheKey}`);
 
     setTimeout(() => {
       delete cache[cacheKey];
       console.log(`🧹 Cache expired for ${cacheKey}`);
-    }, 2 * 60 * 1000); // Clear cache in 2 min
+    }, 2 * 60 * 1000); // 2 minutes
 
     res.json(tweetData);
   } catch (error) {
-    console.error("❌ Twitter API Error:", error.response?.data || error.message);
+    console.error("API Error:", error.response?.data || error.message);
     res.status(500).json({ error: "Something went wrong" });
   }
-});
-
-// ----------------------
-// ✅ Start Server
-// ----------------------
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
