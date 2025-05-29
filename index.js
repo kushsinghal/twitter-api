@@ -65,8 +65,12 @@ app.get("/latest-tweet", async (req, res) => {
     );
 
  // ✅ Step 3: Debug log full response
-    console.log("RAW Twitter API Response:");
-    console.dir(tweetsRes.data, { depth: null });
+    console.log("📦 TWEETS RESPONSE:");
+console.dir(tweetsRes.data.data, { depth: null });
+
+console.log("🎞️ INCLUDED MEDIA:");
+console.dir(tweetsRes.data.includes?.media, { depth: null });
+
     const tweets = tweetsRes.data.data;
     const mediaMap = {};
     const includes = tweetsRes.data.includes;
